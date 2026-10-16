@@ -48,8 +48,8 @@ Inizia sempre con i comandi di sola lettura.
 ## Installazione
 
 ```sh
-git clone <url-del-repository> vedo-client
-cd vedo-client
+git clone https://github.com/margiov/comelit-vedo-client.git
+cd comelit-vedo-client
 python3 vedo_client.py --help
 ```
 
