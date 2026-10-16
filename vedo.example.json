@@ -1,0 +1,6 @@
+{
+  "host": "192.168.1.50",
+  "port": 10012,
+  "unit_id": "000000",
+  "_commento_aree": "i nomi delle aree si leggono dalla centrale (vedi --names); --arm/--disarm accettano nome, inizio del nome o indice"
+}

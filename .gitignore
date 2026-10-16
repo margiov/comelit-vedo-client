@@ -1,0 +1,18 @@
+# configurazione locale: contiene la credenziale unit_id
+vedo.json
+
+# catture, log e materiali dell'impianto
+*.pcap
+*.pcapng
+*.csv
+*.apk
+*.apks
+*.zip
+*.mp4
+*.jpg
+*.png
+*.pem
+NOTES.md
+
+__pycache__/
+*.pyc
