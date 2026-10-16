@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 Gianni Marzulli
+# Copyright (c) 2026 margiov
 """Client per il protocollo nativo delle centrali Comelit VEDO (TCP 10012 / TLS 10022).
 
 Protocollo ricostruito via reverse engineering (vedi README.md). Permette di:

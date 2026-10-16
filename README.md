@@ -269,4 +269,4 @@ firmware. Non allegare mai catture, log o file di configurazione non anonimizzat
 
 ## Licenza
 
-[MIT](LICENSE) © 2026 Gianni Marzulli.
+[MIT](LICENSE) © 2026 margiov.
