@@ -40,8 +40,8 @@ dalla centrale.
   - porta **10022**: stesso protocollo dentro TLS 1.2, con certificato self-signed.
 - La credenziale `unit_id` della tua installazione (vedi [Ottenere `unit_id`](#ottenere-unit_id)).
 
-Compatibilità: sviluppato e provato su una sola installazione, con l'app Comelit per
-Android in versione 7.5.0. Altri modelli o firmware potrebbero comportarsi diversamente.
+Compatibilità: sviluppato e provato su una sola installazione, una centrale
+**Comelit VEDO 34** con modulo IP, usando l'app Comelit per Android 7.5.0. Altri modelli o firmware potrebbero comportarsi diversamente.
 Inizia sempre con i comandi di sola lettura.
 
 ## Installazione
@@ -213,7 +213,8 @@ Le zone non presenti nella configurazione della centrale non vengono mostrate.
 - È supportato solo l'inserimento **totale** di un'area. L'inserimento parziale
   (P1/P2/P12) non è implementato.
 - Esclusione e isolamento delle zone e comando delle uscite non sono implementati.
-- `--status` e `--monitor` coprono le prime 30 zone.
+- `--status` e `--monitor` coprono le prime 30 zone: su una VEDO 34 le zone 31–34 non
+  vengono ancora mostrate.
 - La centrale non invia aggiornamenti spontanei. `--monitor` la interroga a intervalli
   regolari: con `--interval` scegli il compromesso tra reattività e traffico.
 - Il protocollo può cambiare con aggiornamenti del firmware della centrale o dell'app.
