@@ -4,9 +4,9 @@
 Protocollo ricostruito via reverse engineering (vedi README.md). Permette di:
   - armare/disarmare SINGOLE aree con un vettore esplicito per area, che non
     tocca le aree non indicate;
-  - leggere nomi di aree e zone dalla centrale;
+  - leggere nomi e stato di aree e zone dalla centrale;
   - leggere il log eventi;
-  - monitorare lo stato delle zone.
+  - monitorare in tempo reale lo stato di zone (e, su richiesta, delle aree).
 
 ATTENZIONE: opera su un impianto d'allarme reale. Le azioni di arma/disarma
 richiedono il flag --yes.
@@ -19,8 +19,9 @@ Esempi:
   python3 vedo_client.py --probe
   python3 vedo_client.py --names
   python3 vedo_client.py --status
+  python3 vedo_client.py --areas
   python3 vedo_client.py --log 20
-  python3 vedo_client.py --monitor 60
+  python3 vedo_client.py --monitor 60 --with-areas
   python3 vedo_client.py --arm "Area 2" --yes     # nome area letto dalla centrale
   python3 vedo_client.py --disarm 1 --yes         # oppure indice (0-based)
 """
@@ -293,6 +294,54 @@ class Vedo:
         l'indice 0 e' il tamper di sistema, quindi la zona z e' il record z+1."""
         return self.read_names(session, self.CFG_ZONES, 1, num_zones)
 
+    # stato aree (frame 6029): record da 4 byte per area.
+    #   byte0 = stato: 0x00 non presente, 0x01 disinserita, 0x02 inserita
+    #   byte1 = flag: 0x01 non pronta (zona aperta); altri bit riportati grezzi
+    #   byte2 = 0x18 di base + bit transitori durante il cambio (non significativi)
+    AREA_STATE = {0x00: "non presente", 0x01: "disinserita", 0x02: "inserita"}
+    AREA_FLAGS = [(0x01, "non pronta")]
+
+    @classmethod
+    def _decode_area(cls, rec):
+        """Da un record 4 byte a un dizionario di stato (None se non presente)."""
+        if not rec or rec[0] == 0x00:
+            return None
+        flags = [name for bit, name in cls.AREA_FLAGS if rec[1] & bit]
+        extra = rec[1] & ~sum(bit for bit, _ in cls.AREA_FLAGS)
+        if extra:
+            flags.append(f"flag:{extra:#04x}")
+        return {
+            "state": cls.AREA_STATE.get(rec[0], f"sconosciuto:{rec[0]:#04x}"),
+            "armed": rec[0] == 0x02,
+            "flags": flags,
+            "raw": rec.hex(),
+        }
+
+    def _area_records(self, payload):
+        """Estrae i record (4 byte) dal frame di stato aree 6029."""
+        n, recsz = struct.unpack(">H", payload[8:10])[0], struct.unpack(">H", payload[10:12])[0]
+        off = 12 + recsz
+        dlen = struct.unpack(">H", payload[off:off + 2])[0]
+        data = payload[off + 2:off + 2 + dlen]
+        return [data[i * recsz:(i + 1) * recsz] for i in range(n)]
+
+    def read_areas(self, session, names=None, wait=4.0):
+        """Stato delle aree presenti: {nome: {state, armed, flags, raw}}."""
+        self.send(session, 0x4012, self.AREAS_STATUS_PFX + bytes.fromhex("60040020000000"))
+        self.sock.settimeout(wait)
+        try:
+            pl = self.recv_matching(0x4012, self.AREAS_STATUS_PFX)["payload"]
+        except (TimeoutError, socket.timeout):
+            return None
+        out = {}
+        for i, rec in enumerate(self._area_records(pl)):
+            info = self._decode_area(rec)
+            if info is None:
+                continue
+            label = names[i] if names and i < len(names) and names[i] else f"Area {i}"
+            out[label] = info
+        return out
+
     # richieste di sottoscrizione dello stream realtime (osservate dall'app)
     SUBS = [
         "00010000000060040008000000",   # stato aree
@@ -332,37 +381,63 @@ class Vedo:
 
     ZONE_PAGE_REQ = bytes.fromhex("0000000000026004003d000000")   # prima pagina stato zone
 
-    def monitor(self, session, seconds=30, names=None, on_change=None, interval=1.0):
-        """Monitora lo stato zone per N secondi, chiamando on_change(zona, prima, dopo).
+    AREA_REQ = bytes.fromhex("00010000000060040020000000")   # stato aree (frame 6029)
+
+    def monitor(self, session, seconds=30, names=None, on_change=None, interval=1.0,
+                area_names=None, on_area=None):
+        """Monitora lo stato zone (e, se on_area e' dato, delle aree) per N secondi.
+        on_change(zona, prima, dopo) per le zone, on_area(area, prima, dopo) per le aree.
         La centrale non invia aggiornamenti spontanei: risponde solo alle richieste,
-        quindi la pagina di stato zone viene richiesta ogni `interval` secondi
-        (l'app lo fa ogni ~4.5 s quando e' aperta la schermata zone)."""
+        quindi lo stato viene interrogato ogni `interval` secondi (l'app lo fa ogni
+        ~4.5 s per le zone quando e' aperta la schermata zone)."""
         for s in self.SUBS:
             self.send(session, 0x4012, bytes.fromhex(s))
         t0 = time.time()
         next_poll = t0 + interval
-        state = None
+        zstate = None
+        astate = None
         while time.time() - t0 < seconds:
             now = time.time()
             if now >= next_poll:
                 self.send(session, 0x4012, self.ZONE_PAGE_REQ)
+                if on_area:
+                    self.send(session, 0x4012, self.AREA_REQ)
                 next_poll = now + interval
             self.sock.settimeout(max(0.05, next_poll - time.time()))
             try:
                 fr = self.recv_frame()
             except socket.timeout:
                 continue
-            if fr["msgtype"] == 0x4012 and fr["payload"].startswith(self.ZONE_FRAME_PFX):
+            if fr["msgtype"] != 0x4012:
+                continue
+            if fr["payload"].startswith(self.ZONE_FRAME_PFX):
                 z = self._decode_zones(fr["payload"], names)
-                if state is None:
-                    state = z
+                if zstate is None:
+                    zstate = z
                     if on_change:
                         on_change(None, None, z)   # snapshot iniziale
                 else:
                     for k, v in z.items():
-                        if state.get(k) != v and on_change:
-                            on_change(k, state.get(k), v)
-                    state = z
+                        if zstate.get(k) != v and on_change:
+                            on_change(k, zstate.get(k), v)
+                    zstate = z
+            elif on_area and fr["payload"].startswith(self.AREAS_STATUS_PFX):
+                a = {}
+                for i, rec in enumerate(self._area_records(fr["payload"])):
+                    info = self._decode_area(rec)
+                    if info is None:
+                        continue
+                    label = (area_names[i] if area_names and i < len(area_names) and area_names[i]
+                             else f"Area {i}")
+                    a[label] = info
+                if astate is None:
+                    astate = a
+                    on_area(None, None, a)
+                else:
+                    for k, v in a.items():
+                        if astate.get(k) != v:
+                            on_area(k, astate.get(k), v)
+                    astate = a
 
 
 # ------------------------------------------------------------------- config ---
@@ -398,10 +473,13 @@ def main():
     ap.add_argument("--no-tls", dest="tls", action="store_false", help="forza no-TLS")
     ap.add_argument("--probe", action="store_true", help="solo handshake (lettura)")
     ap.add_argument("--status", action="store_true", help="snapshot stato zone (lettura)")
+    ap.add_argument("--areas", action="store_true", help="snapshot stato aree (lettura)")
     ap.add_argument("--names", action="store_true",
                     help="nomi di aree e zone letti dalla centrale (lettura)")
     ap.add_argument("--log", type=int, metavar="N", help="ultimi N eventi (lettura)")
     ap.add_argument("--monitor", type=int, metavar="SEC", help="monitor stato zone (lettura)")
+    ap.add_argument("--with-areas", action="store_true",
+                    help="con --monitor, segui anche lo stato delle aree")
     ap.add_argument("--interval", type=float, default=1.0, metavar="SEC",
                     help="intervallo di interrogazione per --monitor (default 1s)")
     ap.add_argument("--arm", metavar="AREA", help="arma l'area (nome dalla centrale, anche solo l'inizio, o indice)")
@@ -468,6 +546,17 @@ def main():
                 print(f"[!] nomi zona non letti dalla centrale ({e}), uso 'Zona N'")
                 return None
 
+        def panel_area_names():
+            """Nomi area dalla centrale; se la lettura fallisce, "Area N"."""
+            try:
+                return v.read_area_names(ctrl)
+            except (TimeoutError, socket.timeout, struct.error) as e:
+                print(f"[!] nomi area non letti dalla centrale ({e}), uso 'Area N'")
+                return None
+
+        def fmt_area(info):
+            return info["state"] + (f" ({', '.join(info['flags'])})" if info["flags"] else "")
+
         if args.names:
             print("[*] aree (indice: nome):")
             for i, n in enumerate(v.read_area_names(ctrl)):
@@ -486,6 +575,16 @@ def main():
                 print(f"  {when}  {text}")
             return
 
+        if args.areas:
+            a = v.read_areas(ctrl, panel_area_names())
+            if a is None:
+                print("[!] nessun dato di stato ricevuto")
+            else:
+                print("[*] stato aree:")
+                for k, info in a.items():
+                    print(f"  {k}: {fmt_area(info)}")
+            return
+
         if args.status:
             z = v.read_status_once(ctrl, panel_zone_names())
             if z is None:
@@ -497,18 +596,34 @@ def main():
             return
 
         if args.monitor:
-            print(f"[*] monitor stato zone per {args.monitor}s (interrogazione ogni {args.interval}s)...", flush=True)
+            what = "zone e aree" if args.with_areas else "zone"
+            print(f"[*] monitor stato {what} per {args.monitor}s "
+                  f"(interrogazione ogni {args.interval}s)...", flush=True)
 
             def on_change(zona, prima, dopo):
                 if zona is None:
-                    print("  stato iniziale:")
+                    print("  stato iniziale zone:")
                     for k, fl in dopo.items():
                         print(f"    {k}: {'|'.join(fl) or 'riposo'}")
                 else:
                     ts = time.strftime("%H:%M:%S")
-                    print(f"  {ts}  {zona}: {'|'.join(prima or ['riposo'])} -> {'|'.join(dopo or ['riposo'])}")
+                    print(f"  {ts}  zona {zona}: {'|'.join(prima or ['riposo'])} -> {'|'.join(dopo or ['riposo'])}")
                 sys.stdout.flush()   # righe subito visibili anche in pipe / senza -u
-            v.monitor(ctrl, args.monitor, panel_zone_names(), on_change, args.interval)
+
+            def on_area(area, prima, dopo):
+                if area is None:
+                    print("  stato iniziale aree:")
+                    for k, info in dopo.items():
+                        print(f"    {k}: {fmt_area(info)}")
+                else:
+                    ts = time.strftime("%H:%M:%S")
+                    pv = fmt_area(prima) if prima else "?"
+                    print(f"  {ts}  AREA {area}: {pv} -> {fmt_area(dopo)}")
+                sys.stdout.flush()
+
+            v.monitor(ctrl, args.monitor, panel_zone_names(), on_change, args.interval,
+                      area_names=panel_area_names() if args.with_areas else None,
+                      on_area=on_area if args.with_areas else None)
             return
 
         if args.arm or args.disarm:

@@ -18,7 +18,8 @@ stesse porte usate dall'app ufficiale.
 | Verifica la connessione (handshake) | `--probe` | lettura |
 | Nomi di aree e zone letti dalla centrale | `--names` | lettura |
 | Istantanea dello stato delle zone | `--status` | lettura |
-| Monitor continuo dello stato delle zone | `--monitor SEC` | lettura |
+| Istantanea dello stato delle aree | `--areas` | lettura |
+| Monitor continuo dello stato di zone (e aree) | `--monitor SEC` `[--with-areas]` | lettura |
 | Ultimi N eventi del log della centrale | `--log N` | lettura |
 | Inserimento totale di **una** area | `--arm AREA --yes` | **scrittura** |
 | Disinserimento di **una** area | `--disarm AREA --yes` | **scrittura** |
@@ -137,8 +138,12 @@ python3 vedo_client.py --names
 # stato delle zone, una volta sola
 python3 vedo_client.py --status
 
+# stato delle aree (inserita / disinserita), una volta sola
+python3 vedo_client.py --areas
+
 # monitor per 2 minuti, interrogando la centrale ogni 0,5 s
-python3 vedo_client.py --monitor 120 --interval 0.5
+# (--with-areas segue anche lo stato delle aree)
+python3 vedo_client.py --monitor 120 --interval 0.5 --with-areas
 
 # ultimi 20 eventi
 python3 vedo_client.py --log 20
@@ -148,15 +153,19 @@ python3 vedo_client.py --arm "Area 2" --yes
 python3 vedo_client.py --disarm 1 --yes
 ```
 
-Esempio di output di `--monitor`:
+Esempio di output di `--monitor --with-areas`:
 
 ```text
-[*] monitor stato zone per 120s (interrogazione ogni 0.5s)...
-  stato iniziale:
+[*] monitor stato zone e aree per 120s (interrogazione ogni 0.5s)...
+  stato iniziale aree:
+    Area 1: disinserita
+    Area 2: disinserita
+  stato iniziale zone:
     Ingresso: riposo
     Finestra cucina: riposo
-  18:02:11  Ingresso: riposo -> OPEN|READY
-  18:02:14  Ingresso: OPEN|READY -> riposo
+  18:02:11  zona Ingresso: riposo -> OPEN|READY
+  18:02:14  zona Ingresso: OPEN|READY -> riposo
+  18:03:02  AREA Area 2: disinserita -> inserita
 ```
 
 ### Scegliere l'area
@@ -170,6 +179,13 @@ Esempio di output di `--monitor`:
 
 Se il nome è ambiguo, sconosciuto o fuori range, il client si ferma con un errore e
 **non invia nulla**. Lo stesso accade se non riesce a leggere le aree dalla centrale.
+
+### Stato delle aree
+
+`--areas` (e `--monitor --with-areas`) mostra per ogni area presente se è
+`disinserita` o `inserita`. Un'area con una zona aperta è segnalata come
+`non pronta`. Lo stato "in allarme" non è ancora decodificato: per quello usa il
+log eventi (`--log`).
 
 ### Stati delle zone
 
@@ -243,7 +259,7 @@ Riassunto tecnico per chi vuole estendere il client.
 | Tipo | Uso |
 |---|---|
 | `0x400a` | Lettura configurazione. Richiesta `<gruppo> <indice iniziale> <parametro> 6004 <quantità> 000000`. I nomi sono record da 16 byte completati con NUL. Gruppi: `0x0001` aree, `0x0004` tastiere, `0x0010` zone (l'indice 0 è il tamper di sistema), `0x001a` uscite, `0x0025` espansioni radio. |
-| `0x4012` | Stato e log, sempre a domanda e risposta. Stato aree (la risposta riporta il numero reale di aree), pagine di stato zone (8 byte per zona con una bitmask di flag), record del log eventi. |
+| `0x4012` | Stato e log, sempre a domanda e risposta. Stato aree (frame `6029`, 4 byte per area: byte 0 = `00` assente / `01` disinserita / `02` inserita; byte 1 = flag, `01` non pronta), pagine di stato zone (frame `60fd`, 8 byte per zona con una bitmask di flag), record del log eventi. |
 | `0x4013` | Azione sulle aree, sulla device session. Payload `00 02 02 01 <n aree, 2 byte> <vettore>` con 1 byte per area: `00` non toccare, `01` inserisci, `05` disinserisci. Esito nei primi 2 byte della risposta: `0000` significa accettato. |
 
 ## Contribuire
