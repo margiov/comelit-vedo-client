@@ -297,24 +297,31 @@ class Vedo:
         return self.read_names(session, self.CFG_ZONES, 1, num_zones)
 
     # stato aree (frame 6029): record da 4 byte per area.
-    #   byte0 = stato: 0x00 non presente, 0x01 disinserita, 0x02 inserita
-    #   byte1 = flag: 0x01 non pronta (zona aperta); altri bit riportati grezzi
-    #   byte2 = 0x18 di base + bit transitori durante il cambio (non significativi)
-    AREA_STATE = {0x00: "non presente", 0x01: "disinserita", 0x02: "inserita"}
-    AREA_FLAGS = [(0x01, "non pronta")]
+    #   byte0: bit 0x02 = inserita, bit 0x20 = in allarme (osservato 0x22 = inserita+allarme)
+    #   byte1: bit 0x01 = non pronta (zona aperta), bit 0x02 = allarme in memoria
+    #          (persiste a impianto disinserito finche' non viene resettato)
+    #   byte2: 0x18 di base + bit transitori durante il cambio (non significativi)
+    AREA_B0_ARMED, AREA_B0_ALARM = 0x02, 0x20
+    AREA_B1_NOT_READY, AREA_B1_ALARM_MEM = 0x01, 0x02
 
     @classmethod
     def _decode_area(cls, rec):
         """Da un record 4 byte a un dizionario di stato (None se non presente)."""
         if not rec or rec[0] == 0x00:
             return None
-        flags = [name for bit, name in cls.AREA_FLAGS if rec[1] & bit]
-        extra = rec[1] & ~sum(bit for bit, _ in cls.AREA_FLAGS)
-        if extra:
-            flags.append(f"flag:{extra:#04x}")
+        b0, b1 = rec[0], rec[1]
+        armed = bool(b0 & cls.AREA_B0_ARMED)
+        alarm = bool(b0 & cls.AREA_B0_ALARM)
+        flags = []
+        if b1 & cls.AREA_B1_NOT_READY:
+            flags.append("non pronta")
+        if b1 & cls.AREA_B1_ALARM_MEM:
+            flags.append("allarme in memoria")
+        state = "in allarme" if alarm else "inserita" if armed else "disinserita"
         return {
-            "state": cls.AREA_STATE.get(rec[0], f"sconosciuto:{rec[0]:#04x}"),
-            "armed": rec[0] == 0x02,
+            "state": state,
+            "armed": armed,
+            "alarm": alarm,
             "flags": flags,
             "raw": rec.hex(),
         }

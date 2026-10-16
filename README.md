@@ -182,10 +182,10 @@ Se il nome è ambiguo, sconosciuto o fuori range, il client si ferma con un erro
 
 ### Stato delle aree
 
-`--areas` (e `--monitor --with-areas`) mostra per ogni area presente se è
-`disinserita` o `inserita`. Un'area con una zona aperta è segnalata come
-`non pronta`. Lo stato "in allarme" non è ancora decodificato: per quello usa il
-log eventi (`--log`).
+`--areas` (e `--monitor --with-areas`) mostra per ogni area presente lo stato
+`disinserita`, `inserita` o `in allarme`. Come flag aggiuntivi: `non pronta`
+(una zona dell'area è aperta) e `allarme in memoria` (un allarme è scattato e
+resta memorizzato finché non viene resettato, anche a impianto disinserito).
 
 ### Stati delle zone
 
@@ -259,7 +259,7 @@ Riassunto tecnico per chi vuole estendere il client.
 | Tipo | Uso |
 |---|---|
 | `0x400a` | Lettura configurazione. Richiesta `<gruppo> <indice iniziale> <parametro> 6004 <quantità> 000000`. I nomi sono record da 16 byte completati con NUL. Gruppi: `0x0001` aree, `0x0004` tastiere, `0x0010` zone (l'indice 0 è il tamper di sistema), `0x001a` uscite, `0x0025` espansioni radio. |
-| `0x4012` | Stato e log, sempre a domanda e risposta. Stato aree (frame `6029`, 4 byte per area: byte 0 = `00` assente / `01` disinserita / `02` inserita; byte 1 = flag, `01` non pronta), pagine di stato zone (frame `60fd`, 8 byte per zona con una bitmask di flag), record del log eventi. |
+| `0x4012` | Stato e log, sempre a domanda e risposta. Stato aree (frame `6029`, 4 byte per area: byte 0 bit `0x02` = inserita, bit `0x20` = in allarme; byte 1 bit `0x01` = non pronta, bit `0x02` = allarme in memoria), pagine di stato zone (frame `60fd`, 8 byte per zona con una bitmask di flag), record del log eventi. |
 | `0x4013` | Azione sulle aree, sulla device session. Payload `00 02 02 01 <n aree, 2 byte> <vettore>` con 1 byte per area: `00` non toccare, `01` inserisci, `05` disinserisci. Esito nei primi 2 byte della risposta: `0000` significa accettato. |
 
 ## Contribuire
