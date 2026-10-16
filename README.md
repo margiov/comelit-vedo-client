@@ -138,7 +138,7 @@ python3 vedo_client.py --names
 python3 vedo_client.py --status
 
 # monitor per 2 minuti, interrogando la centrale ogni 0,5 s
-python3 -u vedo_client.py --monitor 120 --interval 0.5
+python3 vedo_client.py --monitor 120 --interval 0.5
 
 # ultimi 20 eventi
 python3 vedo_client.py --log 20

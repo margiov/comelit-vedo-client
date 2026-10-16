@@ -497,7 +497,7 @@ def main():
             return
 
         if args.monitor:
-            print(f"[*] monitor stato zone per {args.monitor}s (interrogazione ogni {args.interval}s)...")
+            print(f"[*] monitor stato zone per {args.monitor}s (interrogazione ogni {args.interval}s)...", flush=True)
 
             def on_change(zona, prima, dopo):
                 if zona is None:
@@ -507,6 +507,7 @@ def main():
                 else:
                     ts = time.strftime("%H:%M:%S")
                     print(f"  {ts}  {zona}: {'|'.join(prima or ['riposo'])} -> {'|'.join(dopo or ['riposo'])}")
+                sys.stdout.flush()   # righe subito visibili anche in pipe / senza -u
             v.monitor(ctrl, args.monitor, panel_zone_names(), on_change, args.interval)
             return
 
