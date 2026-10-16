@@ -430,12 +430,16 @@ class Vedo:
                     label = (area_names[i] if area_names and i < len(area_names) and area_names[i]
                              else f"Area {i}")
                     a[label] = info
+                # confronto solo su stato+flag: il byte transitorio durante
+                # arm/disarm cambia 'raw' senza che lo stato reale cambi
+                def _sig(info):
+                    return None if info is None else (info["state"], tuple(info["flags"]))
                 if astate is None:
                     astate = a
                     on_area(None, None, a)
                 else:
                     for k, v in a.items():
-                        if astate.get(k) != v:
+                        if _sig(astate.get(k)) != _sig(v):
                             on_area(k, astate.get(k), v)
                     astate = a
 
