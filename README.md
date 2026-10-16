@@ -213,8 +213,8 @@ Le zone non presenti nella configurazione della centrale non vengono mostrate.
 - È supportato solo l'inserimento **totale** di un'area. L'inserimento parziale
   (P1/P2/P12) non è implementato.
 - Esclusione e isolamento delle zone e comando delle uscite non sono implementati.
-- `--status` e `--monitor` coprono le prime 30 zone: su una VEDO 34 le zone 31–34 non
-  vengono ancora mostrate.
+- `--status`, `--monitor` e `--names` coprono le prime 30 posizioni zona della centrale.
+  Le zone configurate in posizioni successive non vengono ancora mostrate.
 - La centrale non invia aggiornamenti spontanei. `--monitor` la interroga a intervalli
   regolari: con `--interval` scegli il compromesso tra reattività e traffico.
 - Il protocollo può cambiare con aggiornamenti del firmware della centrale o dell'app.
