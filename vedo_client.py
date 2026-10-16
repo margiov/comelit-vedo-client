@@ -297,32 +297,52 @@ class Vedo:
         return self.read_names(session, self.CFG_ZONES, 1, num_zones)
 
     # stato aree (frame 6029): record da 4 byte per area.
-    #   byte0: bit 0x02 = inserita, bit 0x20 = in allarme (osservato 0x22 = inserita+allarme)
-    #   byte1: bit 0x01 = non pronta (zona aperta), bit 0x02 = allarme in memoria
-    #          (persiste a impianto disinserito finche' non viene resettato)
-    #   byte2: 0x18 di base + bit transitori durante il cambio (non significativi)
-    AREA_B0_ARMED, AREA_B0_ALARM = 0x02, 0x20
-    AREA_B1_NOT_READY, AREA_B1_ALARM_MEM = 0x01, 0x02
+    #   record 4 byte = 28 bit, uno per flag, nell'ordine dell'enum AreaStatus
+    #   dell'app (com.comelitgroup.nimbus.dpcp.realtime.AreaStatus).
+    #   (byte_index, bitmask, etichetta). Etichetta vuota = flag "di rumore".
+    AREA_BITS = [
+        (0, 0x01, "disinserita"), (0, 0x02, "inserita totale"), (0, 0x04, "inserita P1"),
+        (0, 0x08, "inserita P2"), (0, 0x10, "non pronta"), (0, 0x20, "in allarme"),
+        (0, 0x40, "sabotaggio"), (0, 0x80, "anomalia"),
+        (1, 0x01, "allarme in memoria"), (1, 0x02, "non pronta (totale)"),
+        (1, 0x04, "non pronta P1"), (1, 0x08, "non pronta P2"), (1, 0x10, "allarme in corso"),
+        (1, 0x20, "esclusione"), (1, 0x40, "tempo di ingresso"), (1, 0x80, "tempo di uscita"),
+        (2, 0x01, "inserimento fallito"), (2, 0x02, "inserimento completato"),
+        (2, 0x04, "disinserimento completato"), (2, 0x08, ""), (2, 0x10, ""), (2, 0x20, ""),
+        (2, 0x40, "zona aperta"), (2, 0x80, "uscita attiva"),
+        (3, 0x01, "allarme P1"), (3, 0x02, "allarme P2"), (3, 0x04, "memoria P1"),
+        (3, 0x08, "memoria P2"),
+    ]
 
     @classmethod
     def _decode_area(cls, rec):
         """Da un record 4 byte a un dizionario di stato (None se non presente)."""
         if not rec or rec[0] == 0x00:
             return None
-        b0, b1 = rec[0], rec[1]
-        armed = bool(b0 & cls.AREA_B0_ARMED)
-        alarm = bool(b0 & cls.AREA_B0_ALARM)
-        flags = []
-        if b1 & cls.AREA_B1_NOT_READY:
-            flags.append("non pronta")
-        if b1 & cls.AREA_B1_ALARM_MEM:
-            flags.append("allarme in memoria")
-        state = "in allarme" if alarm else "inserita" if armed else "disinserita"
+        active = {name for bi, bit, name in cls.AREA_BITS if rec[bi] & bit}
+        b0 = rec[0]
+        alarm = bool(b0 & 0x20)
+        arming = bool(rec[1] & 0x80)       # tempo di uscita = inserimento in corso
+        pending = bool(rec[1] & 0x40)      # tempo di ingresso = pre-allarme
+        armed = bool(b0 & 0x0E)            # totale/P1/P2
+        if alarm:
+            state = "in allarme"
+        elif arming:
+            state = "in inserimento"
+        elif pending:
+            state = "pre-allarme"
+        elif armed:
+            state = "inserita"
+        elif b0 & 0x01:
+            state = "disinserita"
+        else:
+            state = "sconosciuto"
         return {
             "state": state,
             "armed": armed,
             "alarm": alarm,
-            "flags": flags,
+            "arming": arming,
+            "flags": sorted(n for n in active if n),
             "raw": rec.hex(),
         }
 

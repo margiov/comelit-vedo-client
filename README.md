@@ -182,10 +182,13 @@ Se il nome è ambiguo, sconosciuto o fuori range, il client si ferma con un erro
 
 ### Stato delle aree
 
-`--areas` (e `--monitor --with-areas`) mostra per ogni area presente lo stato
-`disinserita`, `inserita` o `in allarme`. Come flag aggiuntivi: `non pronta`
-(una zona dell'area è aperta) e `allarme in memoria` (un allarme è scattato e
-resta memorizzato finché non viene resettato, anche a impianto disinserito).
+`--areas` (e `--monitor --with-areas`) mostra per ogni area presente lo stato:
+`disinserita`, `in inserimento` (tempo di uscita in corso), `inserita`,
+`pre-allarme` (tempo di ingresso in corso) o `in allarme`. Oltre allo stato
+vengono elencati i flag attivi, tra cui `allarme in memoria` (un allarme è scattato
+e resta memorizzato finché non viene resettato, anche a impianto disinserito),
+`non pronta`, `sabotaggio`, `anomalia`, `esclusione`, `zona aperta`, `uscita attiva`.
+L'elenco completo dei 28 flag è nell'enum `AreaStatus` dell'app.
 
 ### Stati delle zone
 
@@ -259,7 +262,7 @@ Riassunto tecnico per chi vuole estendere il client.
 | Tipo | Uso |
 |---|---|
 | `0x400a` | Lettura configurazione. Richiesta `<gruppo> <indice iniziale> <parametro> 6004 <quantità> 000000`. I nomi sono record da 16 byte completati con NUL. Gruppi: `0x0001` aree, `0x0004` tastiere, `0x0010` zone (l'indice 0 è il tamper di sistema), `0x001a` uscite, `0x0025` espansioni radio. |
-| `0x4012` | Stato e log, sempre a domanda e risposta. Stato aree (frame `6029`, 4 byte per area: byte 0 bit `0x02` = inserita, bit `0x20` = in allarme; byte 1 bit `0x01` = non pronta, bit `0x02` = allarme in memoria), pagine di stato zone (frame `60fd`, 8 byte per zona con una bitmask di flag), record del log eventi. |
+| `0x4012` | Stato e log, sempre a domanda e risposta. Stato aree (frame `6029`, 4 byte per area = 28 bit, un flag per bit nell'ordine dell'enum `AreaStatus`: byte 0 bit `0x01` disinserita, `0x02` inserita, `0x20` in allarme; byte 1 bit `0x01` allarme in memoria, `0x02` non pronta, `0x40` tempo di ingresso, `0x80` tempo di uscita/inserimento in corso), pagine di stato zone (frame `60fd`, 8 byte per zona con una bitmask di flag), record del log eventi. |
 | `0x4013` | Azione sulle aree, sulla device session. Payload `00 02 02 01 <n aree, 2 byte> <vettore>` con 1 byte per area: `00` non toccare, `01` inserisci, `05` disinserisci. Esito nei primi 2 byte della risposta: `0000` significa accettato. |
 
 ## Contribuire
