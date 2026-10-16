@@ -33,7 +33,10 @@ import socket, ssl, struct, sys, os, json, argparse, time, datetime
 MAGIC = b"\x36\x0c"
 
 # codici azione per area (nel vettore del comando 0x4013)
-ACT_NONE, ACT_ARM, ACT_DISARM = 0x00, 0x01, 0x05  # 0=non toccare 1=arma(TOT) 5=disarma
+# codici per area (ordinali enum AreaActivation dell'app):
+# 0=non toccare, 1=TOT, 2=P1+P2, 3=P1, 4=P2, 5=disarma
+ACT_NONE, ACT_ARM, ACT_P12, ACT_P1, ACT_P2, ACT_DISARM = 0, 1, 2, 3, 4, 5
+ARM_MODES = {"total": ACT_ARM, "p1": ACT_P1, "p2": ACT_P2, "p12": ACT_P12}
 
 # bitmask stato zona (enum RtSpecZoneStatus dell'APK)
 ZSTATUS = [(1, "OPEN"), (2, "ALARM"), (4, "FAULTY"), (8, "SABOTAGED"),
@@ -516,6 +519,8 @@ def main():
     ap.add_argument("--interval", type=float, default=1.0, metavar="SEC",
                     help="intervallo di interrogazione per --monitor (default 1s)")
     ap.add_argument("--arm", metavar="AREA", help="arma l'area (nome dalla centrale, anche solo l'inizio, o indice)")
+    ap.add_argument("--mode", choices=list(ARM_MODES), default="total",
+                    help="tipo di inserimento per --arm: total (default), p1, p2, p12")
     ap.add_argument("--disarm", metavar="AREA", help="disarma l'area (nome dalla centrale, anche solo l'inizio, o indice)")
     ap.add_argument("--yes", action="store_true", help="autorizza l'azione sull'allarme")
     ap.add_argument("-v", "--verbose", action="store_true", help="output di debug del protocollo")
@@ -661,7 +666,7 @@ def main():
 
         if args.arm or args.disarm:
             name = args.arm or args.disarm
-            code = ACT_ARM if args.arm else ACT_DISARM
+            code = ARM_MODES[args.mode] if args.arm else ACT_DISARM
             try:
                 panel_areas = v.read_area_names(ctrl)   # numero e nomi dalla centrale
             except (TimeoutError, socket.timeout, struct.error) as e:
@@ -669,7 +674,7 @@ def main():
             idx = resolve_area(name, panel_areas)
             vector = make_vector(idx, code, len(panel_areas))
             area_label = panel_areas[idx] if idx < len(panel_areas) else f"Area {idx + 1}"
-            verb = "arma" if args.arm else "disarma"
+            verb = (f"arma ({args.mode})" if args.arm else "disarma")
             print(f"[*] {verb} area '{area_label}' (indice {idx}) vettore={vector.hex()}")
             if not args.yes:   # prima di aprire la device session: la centrale la registra
                 raise PermissionError("azione sull'allarme non confermata (manca --yes)")

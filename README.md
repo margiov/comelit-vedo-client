@@ -151,6 +151,11 @@ python3 vedo_client.py --log 20
 # inserisce / disinserisce UNA area
 python3 vedo_client.py --arm "Area 2" --yes
 python3 vedo_client.py --disarm 1 --yes
+
+# inserimento parziale (P1, P2 o P1+P2) di UNA area
+python3 vedo_client.py --arm "Area 2" --mode p1 --yes
+python3 vedo_client.py --arm "Area 2" --mode p2 --yes
+python3 vedo_client.py --arm "Area 2" --mode p12 --yes
 ```
 
 Esempio di output di `--monitor --with-areas`:
@@ -179,6 +184,10 @@ Esempio di output di `--monitor --with-areas`:
 
 Se il nome è ambiguo, sconosciuto o fuori range, il client si ferma con un errore e
 **non invia nulla**. Lo stesso accade se non riesce a leggere le aree dalla centrale.
+
+`--mode` sceglie il tipo di inserimento: `total` (default), `p1`, `p2`, `p12`. I codici
+parziali derivano dall'enum `AreaActivation` dell'app (`total`/`disarma` verificati su
+cattura; `p1`/`p2`/`p12` non ancora verificati su campo).
 
 ### Stato delle aree
 
